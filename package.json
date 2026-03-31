@@ -1,0 +1,16 @@
+{
+  "name": "hacoo-discord-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord pour chercher des produits sur Hacoo",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "puppeteer": "^21.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
