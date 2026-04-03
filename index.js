@@ -4,7 +4,7 @@ const puppeteer = require("puppeteer");
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 const TELEGRAM_CHANNELS = [
-  "hacoolinksydeuxx", "linkscrewfinds", "mkfashionfinds", "hacoolinksvip",
+  "hacoolinksydeuxx", "linkcrewfinds", "mkfashionfinds", "hacoolinksvip",
   "HacooFranceLiens", "hacoolinks10chanel", "iammmchannel", "mariehacoo",
   "haccoyeplinks", "hacoolinks", "HacooLinksCarla1"
 ];
