@@ -1,39 +1,21 @@
-FROM node:18-slim
+# Image officielle contenant Node.js et Chrome
+FROM ghcr.io/puppeteer/puppeteer:21.5.0
 
-# Installation des dépendances pour ajouter un dépôt sécurisé
-RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    ca-certificates \
-    --no-install-recommends
-
-# Ajout de la clé et du dépôt Google Chrome
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
-
-# Installation de Chrome et des polices nécessaires
-RUN apt-get update && apt-get install -y \
-    google-chrome-stable \
-    fonts-ipafont-gothic \
-    fonts-wqy-zenhei \
-    fonts-thai-tlwg \
-    fonts-kacst \
-    fonts-freefont-ttf \
-    libxss1 \
-    --no-install-recommends \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
+# Dossier de travail
 WORKDIR /app
 
-# Installation des dépendances Node
+# Copie des fichiers de dépendances
 COPY package*.json ./
+
+# Installation propre (Railway ne perdra pas de temps ici)
 RUN npm install --only=production
 
+# Copie du reste du code
 COPY . .
 
-# Variables pour Puppeteer
+# Variables système indispensables
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
+# Lancement du bot
 CMD ["node", "index.js"]
