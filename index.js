@@ -3,14 +3,19 @@ const puppeteer = require("puppeteer");
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// Ta liste de 20 serveurs (tu peux en ajouter d'autres ici)
+// Ta liste de serveurs
 const TELEGRAM_CHANNELS = [
   "hacoolinksydeuxx", "linkscrewfinds", "mkfashionfinds", "hacoolinksvip",
   "HacooFranceLiens", "hacoolinks10chanel", "iammmchannel", "mariehacoo",
-  "haccoyeplinks", "hacoolinks", "HacooLinksCarla1", "hacoolinks10chanel"
+  "haccoyeplinks", "hacoolinks", "HacooLinksCarla1"
 ];
 
-async function scanTelegram(query) {
+// La base de données temporaire du bot
+let productDatabase = [];
+let isReadyToSearch = false;
+
+async function performInitialScan() {
+  console.log("🚀 Lancement du scan initial de tous les canaux...");
   let browser;
   try {
     browser = await puppeteer.launch({
@@ -22,61 +27,68 @@ async function scanTelegram(query) {
     const page = await browser.newPage();
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-    let allResults = [];
-
-    // On parcourt les serveurs (on en prend 5 au hasard par recherche pour éviter les timeouts)
-    const shuffled = TELEGRAM_CHANNELS.sort(() => 0.5 - Math.random()).slice(0, 5);
-
-    for (const channel of shuffled) {
-      console.log(`🔎 Scan du canal : ${channel}`);
-      await page.goto(`https://t.me/s/${channel}`, { waitUntil: "networkidle2", timeout: 30000 });
-      
-      const found = await page.evaluate((searchQuery) => {
-        const messages = document.querySelectorAll(".tgme_widget_message");
-        const matches = [];
+    for (const channel of TELEGRAM_CHANNELS) {
+      console.log(`📡 Scan de @${channel}...`);
+      try {
+        await page.goto(`https://t.me/s/${channel}`, { waitUntil: "networkidle2", timeout: 40000 });
         
-        messages.forEach(msg => {
-          const text = msg.innerText.toLowerCase();
-          // On vérifie si le message contient ton mot-clé (ex: "nike")
-          if (text.includes(searchQuery.toLowerCase())) {
-            const link = msg.querySelector('a[href*="hacoo"], a[href*="onlyaff"]')?.href;
+        // On scrolle 3 fois pour chaque canal au début
+        for (let i = 0; i < 3; i++) {
+          await page.evaluate(() => window.scrollTo(0, -5000));
+          await new Promise(r => setTimeout(r, 1000));
+        }
+
+        const found = await page.evaluate(() => {
+          const messages = document.querySelectorAll(".tgme_widget_message");
+          const results = [];
+          messages.forEach(msg => {
+            const text = msg.innerText;
+            const linkEl = msg.querySelector('a[href*="hacoo"], a[href*="onlyaff"], a[href*="link"]');
             const imgStyle = msg.querySelector(".tgme_widget_message_photo_wrap")?.getAttribute("style");
             const img = imgStyle ? imgStyle.match(/url\(['"]?([^'"]+)['"]?\)/)?.[1] : null;
 
-            if (link) {
-              matches.push({
-                title: text.split('\n')[0].substring(0, 100),
-                link: link,
+            if (linkEl && linkEl.href) {
+              results.push({
+                title: text.split('\n')[0].substring(0, 150),
+                fullText: text.toLowerCase(),
+                link: linkEl.href,
                 image: img
               });
             }
-          }
+          });
+          return results;
         });
-        return matches;
-      }, query);
-
-      allResults.push(...found);
-      if (allResults.length >= 10) break;
+        
+        productDatabase.push(...found);
+      } catch (e) { console.log(`Erreur sur ${channel}: ${e.message}`); }
     }
 
-    return allResults.slice(0, 10);
-  } catch (e) {
-    console.error(e);
-    return [];
-  } finally {
-    if (browser) await browser.close();
-  }
+    // Nettoyage des doublons
+    productDatabase = Array.from(new Map(productDatabase.map(item => [item.link, item])).values());
+    
+    isReadyToSearch = true;
+    console.log(`✅ Scan terminé ! ${productDatabase.length} produits en mémoire.`);
+    
+    // Message optionnel dans un salon spécifique (remplace ID_SALON par l'id de ton salon log)
+    const logChannel = client.channels.cache.get("1346455532481072398"); // Mets ton ID ici
+    if (logChannel) logChannel.send(`✅ **Base de données Hacoo prête !** ${productDatabase.length} articles indexés.`);
+
+  } catch (e) { console.error("Erreur scan:", e); }
+  finally { if (browser) await browser.close(); }
 }
 
 client.on("interactionCreate", async (interaction) => {
   if (interaction.commandName === "search") {
-    await interaction.deferReply();
-    const query = interaction.options.getString("query");
-    
-    const results = await scanTelegram(query);
-    
+    if (!isReadyToSearch) {
+      return interaction.reply({ content: "⏳ Le bot est encore en train de scanner les canaux Telegram au démarrage. Réessaie dans 2 minutes.", ephemeral: true });
+    }
+
+    const query = interaction.options.getString("query").toLowerCase();
+    // On cherche dans notre base de données locale (très rapide !)
+    const results = productDatabase.filter(p => p.fullText.includes(query)).slice(0, 10);
+
     if (results.length === 0) {
-      return interaction.editReply(`❌ Aucun lien trouvé pour "**${query}**" dans les serveurs Telegram.`);
+      return interaction.reply(`❌ Aucun article trouvé pour "**${query}**" dans ma base de données actuelle.`);
     }
 
     const embeds = results.map(res => {
@@ -85,14 +97,11 @@ client.on("interactionCreate", async (interaction) => {
         .setColor(0x00ff00)
         .setTitle(res.title)
         .setURL(affLink)
-        .setDescription(`🔗 [Clique ici pour le lien Hacoo](${affLink})`)
-        .setImage(res.image);
+        .setImage(res.image)
+        .setFooter({ text: "Source: Telegram Scanner" });
     });
 
-    await interaction.editReply({ 
-      content: `✅ J'ai scanné les serveurs ! Voici les résultats pour : **${query}**`,
-      embeds: embeds 
-    });
+    await interaction.reply({ content: `✅ Voici les résultats pour : **${query}**`, embeds: embeds });
   }
 });
 
@@ -100,11 +109,14 @@ client.once("ready", async () => {
   const cmd = [
     new SlashCommandBuilder()
       .setName("search")
-      .setDescription("Scanne 20 serveurs Telegram pour un produit")
-      .addStringOption(o => o.setName("query").setDescription("Produit (ex: Nike)").setRequired(true))
+      .setDescription("Recherche instantanée dans la base Hacoo")
+      .addStringOption(o => o.setName("query").setDescription("Ex: Nike, Kayano...").setRequired(true))
   ];
   await client.application.commands.set(cmd);
-  console.log("✅ Bot Scanner Telegram prêt !");
+  console.log("🤖 Bot en ligne, démarrage du scan...");
+  
+  // Lancement du scan au démarrage
+  performInitialScan();
 });
 
 client.login(process.env.DISCORD_TOKEN);
