@@ -1,22 +1,33 @@
-FROM ghcr.io/puppeteer/puppeteer:21.5.0
+# Utilisation d'une version ultra-légère
+FROM node:18-slim
 
-# Passer en root pour installer si besoin, mais l'image a déjà Chrome
-USER root
+# Installation des dépendances système minimales pour Chrome
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    ca-certificates \
+    procps \
+    libxss1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Définir le dossier de travail
+# Installation de Chrome
+RUN apt-get update && apt-get install -y \
+    google-chrome-stable \
+    --no-install-recommends \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copier les fichiers de dépendances
+# Installation des dépendances Node
 COPY package*.json ./
+RUN npm install --only=production
 
-# Installer les dépendances
-RUN npm install
-
-# Copier le reste du code
 COPY . .
 
-# Variable d'environnement pour Puppeteer dans Docker
+# On force le chemin pour Puppeteer
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
-# Lancer le bot
 CMD ["node", "index.js"]
